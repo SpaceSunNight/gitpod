@@ -21,10 +21,18 @@ import (
 
 // NewMuxTerminalService creates a new terminal service
 func NewMuxTerminalService(m *Mux) *MuxTerminalService {
+	shell := os.Getenv("SHELL")
+	if shell == "/bin/false" {
+		shell = "/bin/bash"
+	}
+	if shell == "" {
+		shell = "/bin/bash"
+	}
 	return &MuxTerminalService{
 		Mux:            m,
 		DefaultWorkdir: "/workspace",
-		LoginShell:     []string{"/bin/bash", "-i", "-l"},
+		DefaultShell:   shell,
+		Env:            os.Environ(),
 	}
 }
 
@@ -33,7 +41,8 @@ type MuxTerminalService struct {
 	Mux *Mux
 
 	DefaultWorkdir string
-	LoginShell     []string
+	DefaultShell   string
+	Env            []string
 
 	tokens map[*Term]string
 }
@@ -50,9 +59,9 @@ func (srv *MuxTerminalService) RegisterREST(mux *runtime.ServeMux, grpcEndpoint 
 
 // Open opens a new terminal running the login shell
 func (srv *MuxTerminalService) Open(ctx context.Context, req *api.OpenTerminalRequest) (*api.OpenTerminalResponse, error) {
-	cmd := exec.Command(srv.LoginShell[0], srv.LoginShell[1:]...)
+	cmd := exec.Command(srv.DefaultShell, "-i")
 	cmd.Dir = srv.DefaultWorkdir
-	cmd.Env = append(os.Environ(), "TERM=xterm-color")
+	cmd.Env = append(srv.Env, "TERM=xterm-color")
 	for key, value := range req.Env {
 		cmd.Env = append(cmd.Env, key+"="+value)
 	}

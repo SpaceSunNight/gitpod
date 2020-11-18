@@ -143,7 +143,9 @@ func Run(options ...RunOption) {
 	)
 	taskManager := newTasksManager(cfg, termMuxSrv, cstate)
 
+	ideEnv := buildIDEEnv(cfg)
 	termMuxSrv.DefaultWorkdir = cfg.RepoRoot
+	termMuxSrv.Env = ideEnv
 
 	apiServices := []RegisterableService{
 		&statusService{
@@ -162,7 +164,7 @@ func Run(options ...RunOption) {
 	var wg sync.WaitGroup
 	wg.Add(6)
 	go reaper(ctx, &wg)
-	go startAndWatchIDE(ctx, cfg, &wg, ideReady)
+	go startAndWatchIDE(ctx, cfg, &wg, ideReady, ideEnv)
 	go startContentInit(ctx, cfg, &wg, cstate)
 	go startAPIEndpoint(ctx, cfg, &wg, apiServices, apiEndpointOpts...)
 	go taskManager.Run(ctx, &wg)
@@ -307,7 +309,7 @@ func reaper(ctx context.Context, wg *sync.WaitGroup) {
 	}
 }
 
-func startAndWatchIDE(ctx context.Context, cfg *Config, wg *sync.WaitGroup, ideReady *ideReadyState) {
+func startAndWatchIDE(ctx context.Context, cfg *Config, wg *sync.WaitGroup, ideReady *ideReadyState, env []string) {
 	defer wg.Done()
 
 	type status int
@@ -330,7 +332,7 @@ supervisorLoop:
 
 		ideStopped = make(chan struct{}, 1)
 		go func() {
-			cmd = prepareIDELaunch(cfg)
+			cmd = prepareIDELaunch(cfg, env)
 
 			// prepareIDELaunch sets Pdeathsig, which on on Linux, will kill the
 			// child process when the thread dies, not when the process dies.
@@ -390,7 +392,7 @@ supervisorLoop:
 	}
 }
 
-func prepareIDELaunch(cfg *Config) *exec.Cmd {
+func prepareIDELaunch(cfg *Config, env []string) *exec.Cmd {
 	var args []string
 	args = append(args, cfg.WorkspaceRoot)
 	args = append(args, "--port", strconv.Itoa(cfg.IDEPort))
@@ -398,7 +400,7 @@ func prepareIDELaunch(cfg *Config) *exec.Cmd {
 	log.WithField("args", args).WithField("entrypoint", cfg.Entrypoint).Info("launching IDE")
 
 	cmd := exec.Command(cfg.Entrypoint, args...)
-	cmd.Env = buildIDEEnv(cfg)
+	cmd.Env = env
 
 	// We need the IDE to run in its own process group, s.t. we can suspend and resume
 	// IDE and its children.
