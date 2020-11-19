@@ -230,14 +230,10 @@ export class StartWorkspace extends React.Component<StartWorkspaceProps, StartWo
                 this.props.service.server.watchHeadlessWorkspaceLogs(workspaceInstance.workspaceId);
             }
         }
-        if (workspaceInstance.status.phase === 'stopping') {
-            if (this.isHeadless) {
-                if (this.workspace) {
-                    const ctxUrl = this.workspace.contextURL.replace('prebuild/', '');
-                    this.redirectTo(new GitpodHostUrl(window.location.toString()).withContext(ctxUrl).toString());
-                } else {
-                    this.redirectToDashboard();
-                }
+        if (workspaceInstance.status.phase === 'stopped') {
+            if (this.isHeadless && this.workspace) {
+                const contextUrl = this.workspace.contextURL.replace('prebuild/', '');
+                this.redirectTo(new GitpodHostUrl(window.location.toString()).withContext(contextUrl).toString());
             }
         }
 
