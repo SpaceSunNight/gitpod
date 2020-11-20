@@ -5,6 +5,7 @@
 package terminal
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -157,13 +158,17 @@ type multiWriterListener struct {
 
 	closed    bool
 	once      sync.Once
+	closeErr  error
 	closeChan chan struct{}
 	cchan     chan []byte
 	done      chan struct{}
 }
 
-func (l *multiWriterListener) Close() error {
+func (l *multiWriterListener) Close(err error) error {
 	l.once.Do(func() {
+		if err != nil {
+			l.closeErr = err
+		}
 		close(l.closeChan)
 		l.closed = true
 
@@ -206,15 +211,19 @@ func (mw *multiWriter) Listen() *multiWriterListener {
 				err = io.ErrShortWrite
 			}
 			if err != nil {
-				log.WithError(err).Error("terminal listener droped out")
-				res.Close()
+				res.Close(err)
 			}
 		}
 	}()
 	go func() {
 		// listener cleanup on close
 		<-closeChan
-		w.Close()
+		if res.closeErr != nil {
+			log.WithError(res.closeErr).Error("terminal listener droped out")
+			w.CloseWithError(res.closeErr)
+		} else {
+			w.Close()
+		}
 		close(cchan)
 
 		mw.mu.Lock()
@@ -241,13 +250,13 @@ func (mw *multiWriter) Write(p []byte) (n int, err error) {
 		select {
 		case lstr.cchan <- p:
 		case <-time.After(5 * time.Second):
-			lstr.Close()
+			lstr.Close(errors.New("write timeout"))
 		}
 
 		select {
 		case <-lstr.done:
 		case <-time.After(5 * time.Second):
-			lstr.Close()
+			lstr.Close(errors.New("write timeout"))
 		}
 	}
 	return len(p), nil
@@ -261,7 +270,7 @@ func (mw *multiWriter) Close() error {
 
 	var err error
 	for w := range mw.listener {
-		cerr := w.Close()
+		cerr := w.Close(nil)
 		if cerr != nil {
 			err = cerr
 		}
