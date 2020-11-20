@@ -249,13 +249,13 @@ func (mw *multiWriter) Write(p []byte) (n int, err error) {
 
 		select {
 		case lstr.cchan <- p:
-		case <-time.After(5 * time.Second):
+		case <-time.After(1 * time.Second):
 			lstr.Close(errors.New("write timeout"))
 		}
 
 		select {
 		case <-lstr.done:
-		case <-time.After(5 * time.Second):
+		case <-time.After(1 * time.Second):
 			lstr.Close(errors.New("write timeout"))
 		}
 	}
